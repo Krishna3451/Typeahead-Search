@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QuickSuggest — Project Report</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 16mm 15mm;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+        color: #1b1f2a;
+        font-size: 11px;
+        line-height: 1.5;
+        margin: 0;
+      }
+      h1 { font-size: 23px; margin: 0 0 4px; letter-spacing: -0.01em; }
+      h2 {
+        font-size: 15px;
+        color: #4646b8;
+        border-bottom: 2px solid #e6e6f4;
+        padding-bottom: 4px;
+        margin: 22px 0 10px;
+        page-break-after: avoid;
+      }
+      h3 { font-size: 12.5px; margin: 14px 0 4px; color: #2a2f3d; }
+      p { margin: 6px 0; }
+      code {
+        font-family: "Consolas", "SF Mono", Menlo, monospace;
+        background: #f1f2f8;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 10px;
+      }
+      pre {
+        background: #f6f7fb;
+        border: 1px solid #e6e8f2;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-family: "Consolas", "SF Mono", Menlo, monospace;
+        font-size: 9.8px;
+        line-height: 1.45;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        page-break-inside: avoid;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0;
+        font-size: 10px;
+        page-break-inside: avoid;
+      }
+      th, td {
+        border: 1px solid #e0e3ef;
+        padding: 5px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { background: #f1f2f8; font-weight: 600; }
+      .meta {
+        color: #5b6072;
+        font-size: 10.5px;
+        margin: 2px 0;
+      }
+      .tag {
+        display: inline-block;
+        background: #ececfb;
+        color: #3d3da8;
+        border-radius: 999px;
+        padding: 1px 9px;
+        font-size: 9.5px;
+        font-weight: 600;
+        margin-right: 5px;
+      }
+      .lead { color: #3a3f4d; font-size: 11.5px; }
+      figure { margin: 10px 0; text-align: center; page-break-inside: avoid; }
+      figcaption { color: #5b6072; font-size: 9.5px; margin-top: 4px; }
+      img { max-width: 100%; border: 1px solid #e0e3ef; border-radius: 8px; }
+      .grid2 { display: flex; gap: 10px; }
+      .grid2 figure { flex: 1; }
+      .pagebreak { page-break-before: always; }
+      .hr { border-top: 1px solid #e6e6f4; margin: 18px 0; }
+      ul { margin: 6px 0; padding-left: 18px; }
+      li { margin: 3px 0; }
+      .kvs { color: #5b6072; }
+      .good { color: #137a4b; font-weight: 600; }
+      svg { width: 100%; height: auto; }
+      .note { background: #f6f7fb; border-left: 3px solid #5b5bd6; padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>⚡ QuickSuggest — Search Typeahead System</h1>
+      <p class="lead">A low-latency search typeahead service: prefix suggestions ranked by popularity, a distributed cache addressed by consistent hashing, recency-aware trending, and batched write-behind persistence.</p>
+      <p class="meta"><strong>Student:</strong> Krishna Faujdar &nbsp;·&nbsp; <strong>Repository:</strong> https://github.com/Krishna3451/Typeahead-Search &nbsp;·&nbsp; <strong>Stack:</strong> Node.js + Express 5, SQLite (better-sqlite3) &nbsp;·&nbsp; June 2026</p>
+      <p>
+        <span class="tag">prefix suggestions</span>
+        <span class="tag">consistent hashing</span>
+        <span class="tag">distributed cache</span>
+        <span class="tag">sliding-window trending</span>
+        <span class="tag">write-behind batching</span>
+      </p>
+    </header>
+
+    <h2>1. Architecture</h2>
+    <p>
+      Two principles drive the design. <strong>(1) Reads stay in memory:</strong> a suggestion request
+      touches only the cache and an in-memory prefix index — never SQLite — which is what makes p99
+      latency sub-millisecond. <strong>(2) Writes are decoupled from requests:</strong> a search updates
+      in-memory state instantly (so suggestions stay fresh) and is persisted later in batches, so the
+      database is never on the hot path.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#5b6072" />
+          </marker>
+          <marker id="arrowDash" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#8a86d8" />
+          </marker>
+        </defs>
+        <style>
+          .box { fill: #ffffff; stroke: #c9cce0; stroke-width: 1.4; }
+          .read { fill: #f4f5fc; stroke: #c2c5e6; }
+          .write { fill: #fbf5f0; stroke: #e6cdb8; }
+          .store { fill: #eef7f1; stroke: #b7ddc6; }
+          .ttl { font-size: 13px; font-weight: 700; fill: #20242f; }
+          .sub { font-size: 10.5px; fill: #5b6072; }
+          .tiny { font-size: 9px; fill: #6a7088; }
+          .edge { stroke: #5b6072; stroke-width: 1.4; fill: none; }
+          .edged { stroke: #8a86d8; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+          .elbl { font-size: 9.5px; fill: #4a4f60; }
+        </style>
+
+        <!-- UI -->
+        <rect class="box" x="285" y="14" width="230" height="50" rx="11" />
+        <text class="ttl" x="400" y="34" text-anchor="middle">Browser UI</text>
+        <text class="sub" x="400" y="50" text-anchor="middle">debounce · keyboard nav · Popular/Trending</text>
+
+        <!-- arrow UI -> Routes -->
+        <line class="edge" x1="400" y1="64" x2="400" y2="106" marker-end="url(#arrow)" />
+        <text class="elbl" x="408" y="88">HTTP (fetch)</text>
+
+        <!-- Routes -->
+        <rect class="box" x="312" y="106" width="176" height="42" rx="11" />
+        <text class="ttl" x="400" y="132" text-anchor="middle">Express routes</text>
+
+        <!-- Routes -> CachePool (read) -->
+        <path class="edge" d="M350,148 C300,170 250,180 230,202" marker-end="url(#arrow)" />
+        <text class="elbl" x="245" y="178">read</text>
+
+        <!-- Routes -> BatchWriter (write) -->
+        <path class="edge" d="M450,148 C520,170 560,180 590,202" marker-end="url(#arrow)" />
+        <text class="elbl" x="500" y="176">POST /search</text>
+
+        <!-- READ LANE -->
+        <rect class="read" x="60" y="204" width="290" height="74" rx="11" />
+        <text class="ttl" x="205" y="226" text-anchor="middle">CachePool — distributed cache</text>
+        <text class="sub" x="205" y="243" text-anchor="middle">4 logical nodes · LRU + TTL</text>
+        <text class="tiny" x="205" y="259" text-anchor="middle">routed by consistent-hash ring (MurmurHash3, 160 vnodes)</text>
+
+        <rect class="read" x="60" y="306" width="290" height="52" rx="11" />
+        <text class="ttl" x="205" y="328" text-anchor="middle">PrefixIndex</text>
+        <text class="sub" x="205" y="345" text-anchor="middle">sorted array + binary search + top-K</text>
+
+        <rect class="read" x="60" y="388" width="290" height="48" rx="11" />
+        <text class="ttl" x="205" y="409" text-anchor="middle">RecencyWindow</text>
+        <text class="sub" x="205" y="425" text-anchor="middle">sliding time buckets (trending)</text>
+
+        <!-- CachePool -> PrefixIndex (miss) and back (fill) -->
+        <line class="edge" x1="160" y1="278" x2="160" y2="306" marker-end="url(#arrow)" />
+        <text class="elbl" x="70" y="296">cache miss</text>
+        <line class="edge" x1="250" y1="306" x2="250" y2="278" marker-end="url(#arrow)" />
+        <text class="elbl" x="258" y="296">fill</text>
+
+        <!-- PrefixIndex -> RecencyWindow -->
+        <line class="edge" x1="205" y1="358" x2="205" y2="388" marker-end="url(#arrow)" />
+        <text class="elbl" x="213" y="377">trending re-rank</text>
+
+        <!-- WRITE LANE -->
+        <rect class="write" x="470" y="204" width="270" height="62" rx="11" />
+        <text class="ttl" x="605" y="228" text-anchor="middle">BatchWriter</text>
+        <text class="sub" x="605" y="245" text-anchor="middle">write-behind buffer + aggregation</text>
+        <text class="tiny" x="605" y="259" text-anchor="middle">flush every 2 s or 200 distinct queries</text>
+
+        <rect class="write" x="470" y="300" width="270" height="44" rx="11" />
+        <text class="ttl" x="605" y="320" text-anchor="middle">Search journal</text>
+        <text class="sub" x="605" y="335" text-anchor="middle">append-only · crash recovery</text>
+
+        <!-- BatchWriter -> Journal -->
+        <line class="edge" x1="605" y1="266" x2="605" y2="300" marker-end="url(#arrow)" />
+        <text class="elbl" x="613" y="287">append first</text>
+
+        <!-- BatchWriter -> PrefixIndex / RecencyWindow live update (dashed) -->
+        <path class="edged" d="M470,238 C400,250 380,300 352,330" marker-end="url(#arrowDash)" />
+        <text class="elbl" x="372" y="262" fill="#6f6bc7">live update</text>
+
+        <!-- SQLite -->
+        <rect class="store" x="298" y="470" width="224" height="50" rx="11" />
+        <text class="ttl" x="410" y="491" text-anchor="middle">SQLite — primary store</text>
+        <text class="sub" x="410" y="507" text-anchor="middle">durable counts (ACID, WAL)</text>
+
+        <!-- BatchWriter -> SQLite flush -->
+        <path class="edge" d="M600,344 C560,410 520,440 488,470" marker-end="url(#arrow)" />
+        <text class="elbl" x="556" y="405">periodic flush · UPSERT</text>
+
+        <!-- SQLite -> PrefixIndex boot load -->
+        <path class="edge" d="M320,470 C250,430 220,400 205,360" marker-end="url(#arrow)" />
+        <text class="elbl" x="120" y="430">load top-N at boot</text>
+      </svg>
+      <figcaption>Figure 1 — Component and data-flow diagram. Left lane = read path; right lane = write path.</figcaption>
+    </figure>
+
+    <h3>Request flows</h3>
+    <p><strong>GET /suggest</strong> normalises the prefix, asks the <code>CachePool</code> (which routes the
+      <code>mode:prefix</code> key through the consistent-hash ring to one logical node). On a hit it returns the
+      cached list (~0.1 ms); on a miss it ranks from the <code>PrefixIndex</code> (and the <code>RecencyWindow</code>
+      for trending mode), fills the cache, and returns. <strong>The SQLite store is never read on this path.</strong></p>
+    <p><strong>POST /search</strong> appends the query to the durability journal, increments the write-behind buffer,
+      and updates the in-memory index and recency window <em>immediately</em> (so suggestions are fresh), then returns
+      <code>{"message":"Searched"}</code>. A background timer (or a full buffer) flushes the buffer to SQLite as one
+      additive <code>UPSERT</code> transaction and invalidates the affected cached prefixes.</p>
+
+    <h3>Data model (SQLite)</h3>
+    <pre>CREATE TABLE queries (
+  query      TEXT    PRIMARY KEY,
+  count      INTEGER NOT NULL DEFAULT 0,   -- ranking weight: dataset count + accepted searches
+  searches   INTEGER NOT NULL DEFAULT 0,   -- times submitted via /search
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_queries_count ON queries(count DESC);</pre>
+
+    <h2 class="pagebreak">2. Dataset — source &amp; loading</h2>
+    <p>
+      QuickSuggest uses the open <strong>Norvig word-frequency n-gram lists</strong> (derived from the Google Web
+      Trillion Word Corpus), already in <code>query&lt;TAB&gt;count</code> form:
+    </p>
+    <table>
+      <tr><th>File</th><th>Source URL</th><th>Rows</th><th>Example line</th></tr>
+      <tr><td><code>count_1w.txt</code></td><td>https://norvig.com/ngrams/count_1w.txt</td><td>~333k single words</td><td><code>the&nbsp;&nbsp;23135851162</code></td></tr>
+      <tr><td><code>count_2w.txt</code></td><td>https://norvig.com/ngrams/count_2w.txt</td><td>~286k two-word phrases</td><td><code>of the&nbsp;&nbsp;2766332391</code></td></tr>
+    </table>
+    <p>
+      Combined that is <strong>591,770 unique queries</strong> with real popularity counts — well above the 100k
+      minimum — and the bigrams supply realistic multi-word queries (<code>data structures</code>, <code>how to</code>,
+      <code>new york</code>). At boot the server loads the <strong>top 300,000</strong> by count into the in-memory index.
+    </p>
+    <h3>Loading instructions</h3>
+    <pre>npm install                 # dependencies (express, better-sqlite3)
+npm run fetch-data          # download the two n-gram files (~10 MB) into data/
+npm run load-data           # parse + ingest into SQLite (a few seconds)
+npm start                   # http://localhost:3000
+
+# offline alternative (no download): generate a synthetic dataset
+npm run load-data -- --synthetic 150000</pre>
+    <p class="kvs">Loader options: <code>--reset</code> (wipe first), <code>--unigrams-only</code>,
+      <code>--limit N</code> (keep top-N), <code>--min-count N</code> (drop rare terms),
+      <code>--synthetic N</code>.</p>
+
+    <h2>3. API documentation</h2>
+    <table>
+      <tr><th>Endpoint</th><th>Purpose / behaviour</th></tr>
+      <tr><td><code>GET /suggest?q=&lt;prefix&gt;&amp;mode=popular|trending</code></td>
+          <td>Up to 10 prefix-matching suggestions. <code>popular</code> (default) sorts by all-time count;
+              <code>trending</code> applies recency-aware ranking. Returns <code>source</code> = cache|index|empty,
+              the owning cache <code>node</code>, and server <code>latencyMs</code>.</td></tr>
+      <tr><td><code>POST /search</code> &nbsp;body <code>{ "query": "…" }</code></td>
+          <td>Records the search (buffered for batched persistence) and returns <code>{ "message": "Searched" }</code>.
+              Empty query → <code>400</code>.</td></tr>
+      <tr><td><code>GET /trending?n=10</code></td>
+          <td>Top queries in the current sliding window, with <code>recent</code> and total <code>count</code>.</td></tr>
+      <tr><td><code>GET /cache/debug?prefix=&lt;p&gt;&amp;mode=</code></td>
+          <td>Routing for a key: <code>cacheKey</code>, <code>keyHash</code>, <code>ownerNode</code>,
+              <code>ringSlotHash</code>, and current <code>status</code> (hit/miss) + TTL remaining.</td></tr>
+      <tr><td><code>GET /cache/distribution?samples=N</code></td>
+          <td>Spread of N distinct keys across the cache nodes (consistent-hashing balance), with <code>percent</code>
+              per node and <code>idealPercent</code>.</td></tr>
+      <tr><td><code>GET /stats</code></td>
+          <td>Latency percentiles, cache hit rate, DB read/write counters, write-reduction factor, buffer depth,
+              journal-recovered count.</td></tr>
+      <tr><td><code>GET /health</code></td><td>Liveness, indexed-query count, pending writes.</td></tr>
+    </table>
+    <h3>Examples</h3>
+    <pre>$ curl 'http://localhost:3000/suggest?q=java'
+{ "prefix":"java", "mode":"popular", "source":"index", "node":"cache-1", "latencyMs":0.14,
+  "suggestions":[ {"query":"java","count":55360151}, {"query":"javascript","count":25766226}, … ] }
+
+$ curl 'http://localhost:3000/suggest?q=data&mode=trending'
+{ "prefix":"data", "mode":"trending", …, "suggestions":[
+    {"query":"data structures","count":998624,"recent":7,"score":28.81},   ← recency lifts it to #1
+    {"query":"data","count":406908390,"recent":0,"score":19.82}, … ] }
+
+$ curl -X POST localhost:3000/search -H 'Content-Type: application/json' -d '{"query":"data structures"}'
+{ "message":"Searched" }
+
+$ curl 'http://localhost:3000/cache/debug?prefix=da'
+{ "prefix":"da", "cacheKey":"popular:da", "keyHash":3932078230, "ownerNode":"cache-3",
+  "ringSlotHash":3935099281, "status":"miss", "ttlRemainingMs":null }</pre>
+
+    <h2 class="pagebreak">4. Design choices &amp; trade-offs</h2>
+
+    <h3>SQLite as the primary store (vs a separate DB server)</h3>
+    <p><strong>Why:</strong> the assignment needs durable, reliable counts and an easy local run — not horizontal
+      scale. SQLite is ACID, embedded (one file, zero ops), and with <code>journal_mode=WAL</code> handles the
+      write-batch + occasional-read pattern comfortably. <strong>Trade-off:</strong> a single embedded file does not
+      scale horizontally — but because reads are served from memory, the store is never the latency bottleneck, so a
+      client/server DB would add operational cost for no read benefit.</p>
+
+    <h3>Sorted array + binary search for prefix matching (vs a trie)</h3>
+    <p><strong>Why:</strong> every query starting with a prefix is a contiguous slice of a lexicographically sorted
+      array, found by binary search. Short, hot prefixes (≤ 3 chars) keep an incrementally-maintained top-K bucket so
+      we never rescan a huge slice. It is compact and cache-friendly, and counts update in <code>O(log n)</code>.
+      <strong>Trade-off:</strong> inserting a brand-new query is an <code>O(n)</code> array splice — acceptable because
+      the vast majority of searches are repeats of queries already in the corpus; new queries could be staged and merged
+      if the write-mix changed.</p>
+
+    <h3>In-process logical cache nodes (vs real Redis processes)</h3>
+    <p><strong>Why:</strong> the spec explicitly allows "logical cache nodes". They exercise the exact same routing,
+      TTL, eviction and invalidation semantics consistent hashing requires, with nothing to install. Each node sits
+      behind a tiny <code>get/set/delete</code> interface. <strong>Trade-off:</strong> they live in the app process, so
+      they don't survive a restart and aren't shared across instances — but each node could be swapped for a Redis
+      process without changing anything above the cache layer.</p>
+
+    <h3>MurmurHash3 ring with 160 virtual nodes (vs <code>hash % N</code>)</h3>
+    <p><strong>Why:</strong> <code>hash % N</code> re-homes almost every key when <code>N</code> changes — fatal for a
+      cache. Consistent hashing re-homes only the keys on the changed node's arcs; virtual nodes keep the arcs even.
+      MurmurHash3's strong avalanche is what keeps the near-identical vnode-position strings well spread (a weaker hash
+      such as FNV-1a clustered them and unbalanced the ring during development). <strong>Trade-off:</strong> 160 vnodes
+      × N nodes ring points cost a little memory and a one-time sort; negligible here.</p>
+
+    <h3>Sliding-window trending (vs exponential time-decay)</h3>
+    <p><strong>Why:</strong> a window of time buckets makes the requirement "a short-lived spike must not be over-ranked
+      forever" <em>structural</em> — the spike's contribution disappears the moment its buckets age past the window edge,
+      with no per-read decay math and no cool-down parameter to tune. <strong>Trade-off:</strong> coarser time resolution
+      within a bucket (10 s), and recency state is process-local (resets on restart).</p>
+
+    <h3>Write-behind batching + append-only journal</h3>
+    <p><strong>Why:</strong> aggregating searches and flushing in batches turns one DB transaction per search into one
+      per flush; the journal records each search before buffering so a crash is recoverable. <strong>Trade-off:</strong>
+      the durable store lags by at most one flush window (≤ 2 s), and a crash can lose searches the OS had not yet flushed
+      to disk (bounded by the journal). For approximate popularity counts this freshness/throughput balance is the right
+      one; <code>fsync</code>-per-append would close the last gap at a throughput cost.</p>
+
+    <h3>TTL + targeted invalidation (vs TTL only)</h3>
+    <p><strong>Why:</strong> short TTLs with ±15% jitter are the staleness safety net (and avoid synchronized expiry);
+      additionally, every flush deletes the cached prefixes of the queries it just updated, so suggestions reflect new
+      counts within one flush window rather than one full TTL. <strong>Trade-off:</strong> a little extra work per flush
+      (bounded by prefix length), well worth the freshness.</p>
+
+    <div class="note"><strong>Consistency posture:</strong> suggestions reflect a search immediately (in-memory update);
+      SQLite is eventually consistent within one flush window; the cache is stale for at most one TTL, usually far less.
+      This is a deliberate latency/availability-first design — reads are always fast and never block on writes.</div>
+
+    <h2 class="pagebreak">5. Performance report</h2>
+    <p class="kvs">Measured in-process with <code>npm run benchmark</code> (no HTTP overhead) on the 591,770-query
+      dataset (top 300,000 loaded). Reproduce with <code>npm run benchmark -- --reads 20000 --writes 20000</code>.</p>
+
+    <h3>Suggestion latency — GET /suggest (popular), 20,000 lookups</h3>
+    <table>
+      <tr><th>p50</th><th>p95</th><th>p99</th><th>max</th><th>mean</th><th>DB reads on read path</th></tr>
+      <tr><td>0.002 ms</td><td>0.080 ms</td><td>0.261 ms</td><td>4.6 ms</td><td>0.017 ms</td><td class="good">0</td></tr>
+    </table>
+    <p><strong>Cache hit rate (steady state): ≈ 81%.</strong> Suggestions are served entirely from the in-memory prefix
+      index and the cache; SQLite is never read on a suggestion request. Trending mode (uncached recency re-rank) p95 ≈ 0.4 ms.</p>
+
+    <h3>Batch write reduction — POST /search, 20,000 searches</h3>
+    <table>
+      <tr><th></th><th>Naive (per-request)</th><th>Write-behind batching</th></tr>
+      <tr><td>Row writes</td><td>20,000</td><td>4,721</td></tr>
+      <tr><td>Transactions</td><td>20,000</td><td>5</td></tr>
+    </table>
+    <p><span class="good">Transaction reduction ≈ 4000×</span> (one transaction per flush, the dominant win — far fewer
+      fsyncs/round-trips, holds regardless of skew). <span class="good">Row-write reduction ≈ 4.2×</span> (repeated
+      queries collapse within a flush window; scales with traffic concentration).
+      <strong>Failure trade-off:</strong> a crash loses at most one un-flushed window; the append-only journal replays
+      un-flushed searches on restart, bounding loss to un-fsynced entries.</p>
+
+    <h3>Distributed cache — consistent-hashing balance (4 nodes × 160 vnodes, 10,000 distinct keys)</h3>
+    <table>
+      <tr><th>cache-0</th><th>cache-1</th><th>cache-2</th><th>cache-3</th><th>ideal</th></tr>
+      <tr><td>26.2%</td><td>23.9%</td><td>24.9%</td><td>25.1%</td><td>25.0%</td></tr>
+    </table>
+    <p><strong>Elasticity:</strong> adding a 5th node re-homed only <span class="good">≈ 21%</span> of keys (ideal
+      <code>1/5</code> = 20%) — versus ~75% for a plain <code>hash % N</code> scheme. That gap is the entire point of
+      consistent hashing. Prefix-index build time: ≈ 4.3 s for 300k queries (one-time, at boot).</p>
+
+    <h3>Testing</h3>
+    <p>25 unit tests (Node's built-in runner) pass, covering the hash ring (balance + re-map cost), prefix index
+      (matching, ordering, live updates, new queries), cache (TTL, LRU, routing, invalidation), recency window
+      (windowing + age-out), ranking (popular vs trending), and the batch writer (aggregation, flush triggers, and
+      journal crash-recovery). Run with <code>npm test</code>.</p>
+
+    <h2 class="pagebreak">Appendix — UI screenshots</h2>
+    <figure>
+      <img src="docs/screenshots/01-initial.png" alt="QuickSuggest landing page" />
+      <figcaption>Figure 2 — Landing page: search bar, Popular/Trending toggle, and the live "Trending now" panel.</figcaption>
+    </figure>
+    <div class="grid2">
+      <figure>
+        <img src="docs/screenshots/02-suggestions.png" alt="Popular suggestions" />
+        <figcaption>Figure 3 — Popular mode: "data" → ranked by all-time count, matched prefix highlighted.</figcaption>
+      </figure>
+      <figure>
+        <img src="docs/screenshots/03-trending.png" alt="Trending suggestions" />
+        <figcaption>Figure 4 — Trending mode: "data structures" (+7 recent) and "database design" (+3 recent) leapfrog "data" (406M count). Same endpoint, different <code>mode</code>.</figcaption>
+      </figure>
+    </div>
+  </body>
+</html>
