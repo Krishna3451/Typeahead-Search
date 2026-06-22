@@ -1,0 +1,32 @@
+{
+  "name": "quicksuggest",
+  "version": "1.0.0",
+  "description": "QuickSuggest - a low-latency search typeahead service with a consistent-hash distributed cache, sliding-window trending, and batched write-behind persistence.",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "fetch-data": "node scripts/fetch-dataset.js",
+    "load-data": "node scripts/load-dataset.js",
+    "benchmark": "node scripts/benchmark.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "typeahead",
+    "autocomplete",
+    "search-suggestions",
+    "consistent-hashing",
+    "distributed-cache",
+    "trending"
+  ],
+  "author": "Krishna",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "express": "^5.2.1"
+  }
+}

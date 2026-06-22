@@ -1,0 +1,2 @@
+# keeps the data/ directory in version control.
+# the dataset files and SQLite db are generated locally (see README).
