@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QuickSuggest - search typeahead</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⚡</text></svg>" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div class="wordmark"><span class="bolt">⚡</span> QuickSuggest</div>
+        <p class="tagline">Low-latency search typeahead over <span id="corpusCount">…</span> queries &mdash; distributed cache, consistent hashing, sliding-window trending.</p>
+      </header>
+
+      <section class="panel">
+        <div class="modes" role="tablist" aria-label="Ranking mode">
+          <button class="mode is-active" data-mode="popular" role="tab" aria-selected="true">Popular</button>
+          <button class="mode" data-mode="trending" role="tab" aria-selected="false">Trending</button>
+          <span class="mode-hint" id="modeHint">sorted by all-time search count</span>
+        </div>
+
+        <div class="searchbar" id="searchbar">
+          <span class="glyph" aria-hidden="true">🔍</span>
+          <input
+            id="q"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Start typing&hellip; e.g. &ldquo;new&rdquo;, &ldquo;how to&rdquo;, &ldquo;data&rdquo;"
+            aria-label="Search query"
+            aria-controls="dropdown"
+            aria-autocomplete="list"
+          />
+          <span class="spinner" id="spinner" hidden></span>
+          <button id="searchBtn" class="go">Search</button>
+          <ul class="dropdown" id="dropdown" role="listbox" hidden></ul>
+        </div>
+
+        <div class="meta-row">
+          <span class="badge" id="sourceBadge" hidden></span>
+          <span class="hint" id="hint">Suggestions appear as you type. Use &uarr; &darr; to navigate, Enter to search.</span>
+        </div>
+
+        <div class="error" id="error" hidden></div>
+        <div class="result" id="result" hidden></div>
+      </section>
+
+      <section class="trending-card">
+        <div class="trending-head">
+          <h2>🔥 Trending now</h2>
+          <span class="window" id="trendingWindow"></span>
+        </div>
+        <ol class="trending-list" id="trending">
+          <li class="muted">No recent searches yet &mdash; submit a few to see trending update.</li>
+        </ol>
+      </section>
+
+      <footer class="foot">
+        <span>Debug:</span>
+        <a href="/stats" target="_blank" rel="noopener">/stats</a>
+        <a href="/cache/distribution" target="_blank" rel="noopener">/cache/distribution</a>
+        <a href="/trending" target="_blank" rel="noopener">/trending</a>
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
